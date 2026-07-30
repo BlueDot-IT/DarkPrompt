@@ -7,6 +7,7 @@ import httpx
 
 from ..adapter import AdapterCapabilities, TargetAdapter
 from ..models import ExecutionTrace, TestCase
+from .common import sanitized_http_error
 
 
 class HuggingFaceAdapter(TargetAdapter):
@@ -71,7 +72,7 @@ class HuggingFaceAdapter(TargetAdapter):
             return self.error_trace(
                 test_case,
                 error_type="http_error",
-                message=str(exc),
+                message=sanitized_http_error(exc),
                 retryable=status in {408, 409, 429} or status >= 500,
                 status_code=status,
             )
@@ -79,5 +80,5 @@ class HuggingFaceAdapter(TargetAdapter):
             return self.error_trace(
                 test_case,
                 error_type=type(exc).__name__,
-                message=str(exc),
+                message="Provider request failed.",
             )

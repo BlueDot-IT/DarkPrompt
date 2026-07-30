@@ -92,7 +92,7 @@ class OpenAIAdapter(TargetAdapter):
             return self.error_trace(
                 test_case,
                 error_type=type(exc).__name__,
-                message=str(exc),
+                message="Provider request failed.",
                 retryable=retryable,
                 status_code=status_code,
             )

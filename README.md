@@ -4,10 +4,10 @@
 
 # DarkPrompt
 
-[![CI](https://github.com/jason-allen-oneal/DarkPrompt/actions/workflows/ci.yml/badge.svg)](https://github.com/jason-allen-oneal/DarkPrompt/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/jason-allen-oneal/DarkPrompt/actions/workflows/codeql.yml/badge.svg)](https://github.com/jason-allen-oneal/DarkPrompt/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/jason-allen-oneal/DarkPrompt/badge)](https://securityscorecards.dev/viewer/?uri=github.com/jason-allen-oneal/DarkPrompt)
-[![License](https://img.shields.io/github/license/jason-allen-oneal/DarkPrompt)](LICENSE)
+[![CI](https://github.com/BlueDot-IT/DarkPrompt/actions/workflows/ci.yml/badge.svg)](https://github.com/BlueDot-IT/DarkPrompt/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/BlueDot-IT/DarkPrompt/actions/workflows/codeql.yml/badge.svg)](https://github.com/BlueDot-IT/DarkPrompt/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/BlueDot-IT/DarkPrompt/badge)](https://securityscorecards.dev/viewer/?uri=github.com/BlueDot-IT/DarkPrompt)
+[![License](https://img.shields.io/github/license/BlueDot-IT/DarkPrompt)](LICENSE)
 
 DarkPrompt is a command-line adversarial testing framework for evaluating prompt injection resistance, unsafe compliance, data leakage, multi-turn attacks, obfuscation handling, tool-use policy, and multimodal payload handling across LLM providers.
 
@@ -38,7 +38,7 @@ Provider and model capabilities still vary. DarkPrompt reports unsupported paylo
 ## Installation
 
 ```bash
-git clone https://github.com/jason-allen-oneal/DarkPrompt.git
+git clone https://github.com/BlueDot-IT/DarkPrompt.git
 cd DarkPrompt
 python3 -m venv .venv
 source .venv/bin/activate
@@ -167,11 +167,6 @@ cases:
         weight: 2
 ```
 
-Image payload markers may use relative paths such as
-`[MEDIA_PAYLOAD:assets/example.png]`. DarkPrompt resolves pack-provided media
-only within the pack directory, rejects symlink escapes and non-image files,
-and limits each image to 10 MiB.
-
 Multi-turn cases use `chain` and may scope assertions to a specific turn:
 
 ```yaml
@@ -201,19 +196,17 @@ Case IDs must be unique across the pack.
 
 Typed assertions produce deterministic per-assertion outcomes and a weighted score. Semantic assertions are marked `INCONCLUSIVE` unless a separate judge provider is configured. Judge output must be valid structured JSON.
 
-Provider failures are marked `ERROR`. They do not affect the resistance score.
+Provider failures are marked `ERROR`. They do not affect the resistance score. With `--fail-on-findings`, failures, skipped cases, and inconclusive cases also produce exit status 2 unless the operator explicitly supplies `--allow-incomplete`.
 
-Reports are available as Markdown or JSON:
+Reports are available as Markdown or JSON. Raw prompts, responses, errors, metadata, tool arguments/results, and assertion evidence are omitted by default; reports retain bounded metadata instead. Operators may opt in to raw evidence (after any configured redaction) with `--include-raw-evidence`:
 
 ```bash
 darkprompt run --pack ./sample_pack --target ollama --format markdown
 darkprompt run --pack ./sample_pack --target ollama --format json
+darkprompt run --pack ./sample_pack --target ollama --include-raw-evidence
 ```
 
-Custom redaction expressions may be repeated. Redaction applies to the complete
-report, including pack data, prompts, responses, tool calls, metadata, provider
-errors, aggregate evaluation content, and assertion evidence. Reports record
-opaque pattern IDs and match counts instead of the literal expressions.
+Custom redaction expressions may be repeated. Redaction applies recursively to prompts, responses, provider errors, tool calls, metadata, aggregate evaluation content, assertion evidence, and raw pack data. Reports identify configured expressions as `pattern-N`; they never persist the expressions themselves.
 
 ```bash
 darkprompt run \
@@ -222,6 +215,8 @@ darkprompt run \
   --redact 'user@example\.com' \
   --redact 'internal-domain\.local'
 ```
+
+Media payloads are confined to the loaded pack directory and DarkPrompt's generated media directory. Only PNG, JPEG, GIF, and WebP files up to 10 MiB are accepted; external paths and symlink escapes are rejected.
 
 ## Development and security
 

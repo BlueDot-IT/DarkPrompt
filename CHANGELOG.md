@@ -2,6 +2,17 @@
 
 All notable changes to DarkPrompt are documented here.
 
+## Unreleased
+
+### Security
+
+- Confined media payloads to approved roots, image MIME types, and a 10 MiB limit.
+- Made raw report evidence operator-opt-in and expanded recursive redaction coverage.
+- Made incomplete evaluations fail `--fail-on-findings` unless explicitly allowed.
+- Added bounded regex evaluation and hardened refusal heuristics against mixed refusal/compliance.
+- Sanitized HTTP status errors before persistence.
+- Added a locked CI dependency graph and corrected organization repository links.
+
 ## 1.2.0
 
 ### Added

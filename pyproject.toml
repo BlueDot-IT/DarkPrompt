@@ -36,6 +36,7 @@ dependencies = [
   "pydantic>=2.7,<3",
   "python-dotenv>=1,<2",
   "pyyaml>=6,<7",
+  "regex>=2024.11.6,<2027",
   "rich>=13,<16",
   "typer>=0.12,<1",
 ]
@@ -56,10 +57,10 @@ darkprompt = "darkprompt.cli:app"
 aat = "darkprompt.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/jason-allen-oneal/DarkPrompt"
-Issues = "https://github.com/jason-allen-oneal/DarkPrompt/issues"
-Source = "https://github.com/jason-allen-oneal/DarkPrompt"
-Security = "https://github.com/jason-allen-oneal/DarkPrompt/security/policy"
+Homepage = "https://github.com/BlueDot-IT/DarkPrompt"
+Issues = "https://github.com/BlueDot-IT/DarkPrompt/issues"
+Source = "https://github.com/BlueDot-IT/DarkPrompt"
+Security = "https://github.com/BlueDot-IT/DarkPrompt/security/policy"
 
 [tool.setuptools.dynamic]
 version = { attr = "darkprompt.__version__" }

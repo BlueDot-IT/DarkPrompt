@@ -163,7 +163,7 @@ def test_reporter_handles_empty_report_and_json_schema(tmp_path: Path):
 
     json_path = reporter.generate_json(pack, [], tmp_path)
     payload = json.loads(json_path.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "1.2"
+    assert payload["schema_version"] == "1.3"
     assert payload["summary"]["error"] == 0
 
 
@@ -208,7 +208,7 @@ def test_reporter_writes_detailed_finding(tmp_path: Path):
         cases=[test_case],
     )
 
-    path = Reporter().generate_markdown(pack, [trace], tmp_path)
+    path = Reporter(include_raw_evidence=True).generate_markdown(pack, [trace], tmp_path)
     report = path.read_text(encoding="utf-8")
     assert "Resistance score: 100.0%" in report
     assert "| CASE-1 | Injection | Base64 | PASS |" in report
@@ -247,7 +247,7 @@ def test_reporter_redacts_complete_report_without_storing_patterns(tmp_path: Pat
     )
     redactor = RegexRedactor([r"secret@example\.com"])
     redacted_trace = redactor.redact(trace)
-    reporter = Reporter(redactor=redactor)
+    reporter = Reporter(include_raw_evidence=True, redactor=redactor)
 
     json_report = reporter.generate_json(pack, [redacted_trace], tmp_path / "json")
     markdown_report = reporter.generate_markdown(

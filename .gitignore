@@ -17,5 +17,4 @@ __pycache__/
 data/eie.db
 *.log
 
-# Dependency lock policy for this library
-uv.lock
+# uv.lock is committed for reproducible CI and development installs.

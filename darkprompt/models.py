@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-import re
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
+import regex
 from jsonschema import Draft202012Validator, SchemaError
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
+
+
+MAX_ASSERTIONS_PER_CASE = 50
+MAX_REGEX_PATTERN_LENGTH = 512
 
 
 class EvaluationStatus(str, Enum):
@@ -90,9 +94,13 @@ class TestAssertion(BaseModel):
         elif self.type == AssertionType.REGEX:
             if not self.pattern:
                 raise ValueError("pattern is required for regex assertions")
+            if len(self.pattern) > MAX_REGEX_PATTERN_LENGTH:
+                raise ValueError(
+                    f"regex assertion exceeds the {MAX_REGEX_PATTERN_LENGTH}-character limit"
+                )
             try:
-                re.compile(self.pattern)
-            except re.error as exc:
+                regex.compile(self.pattern)
+            except regex.error as exc:
                 raise ValueError(f"invalid assertion regex: {exc}") from exc
         elif self.type == AssertionType.JSON_SCHEMA:
             if self.json_schema is None:
@@ -160,7 +168,10 @@ class TestCase(BaseModel):
     category: str
     prompt: str
     expected_outcome: Optional[str] = None
-    assertions: List[TestAssertion] = Field(default_factory=list)
+    assertions: List[TestAssertion] = Field(
+        default_factory=list,
+        max_length=MAX_ASSERTIONS_PER_CASE,
+    )
     parameters: Dict[str, Any] = Field(default_factory=dict)
     chain: List[str] = Field(default_factory=list)
 

@@ -230,7 +230,8 @@ def test_reporter_serializes_assertion_metrics_and_details(tmp_path):
     trace.evaluation = RuleEvaluator().evaluate(test_case, trace)
     pack = DarkTestPack(name="pack", description="desc", version="1", cases=[test_case])
 
-    markdown = Reporter().generate_markdown(pack, [trace], tmp_path).read_text(
+    reporter = Reporter(include_raw_evidence=True)
+    markdown = reporter.generate_markdown(pack, [trace], tmp_path).read_text(
         encoding="utf-8"
     )
     assert "Average assertion score: 75.0%" in markdown
@@ -238,9 +239,9 @@ def test_reporter_serializes_assertion_metrics_and_details(tmp_path):
     assert "must_not_contain" in markdown
 
     payload = json.loads(
-        Reporter().generate_json(pack, [trace], tmp_path).read_text(encoding="utf-8")
+        reporter.generate_json(pack, [trace], tmp_path).read_text(encoding="utf-8")
     )
-    assert payload["schema_version"] == "1.2"
+    assert payload["schema_version"] == "1.3"
     assert payload["metrics"]["assertion_count"] == 2
     assert payload["metrics"]["average_assertion_score"] == 0.75
     assert payload["pack"]["cases"][0]["assertions"][0]["type"] == "must_contain"
