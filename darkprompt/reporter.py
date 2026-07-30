@@ -3,30 +3,22 @@ from __future__ import annotations
 import json
 from collections import Counter
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, List, Optional
+from typing import Any, Iterable, List, Optional
 
 from . import __version__
 from .models import EvaluationStatus, ExecutionTrace, TestPack
-
-if TYPE_CHECKING:
-    from .redactor import RegexRedactor
+from .redactor import RegexRedactor
 
 
 class Reporter:
-    def __init__(self, redactor: Optional["RegexRedactor"] = None):
-        self.redactor = redactor
-
-    def _safe_inputs(
+    def __init__(
         self,
-        pack: TestPack,
-        traces: List[ExecutionTrace],
-    ) -> tuple[TestPack, List[ExecutionTrace]]:
-        if not self.redactor:
-            return pack, traces
-        return (
-            self.redactor.redact_pack(pack),
-            [self.redactor.redact(trace) for trace in traces],
-        )
+        *,
+        include_raw_evidence: bool = False,
+        redactor: Optional[RegexRedactor] = None,
+    ):
+        self.include_raw_evidence = include_raw_evidence
+        self.redactor = redactor
 
     @staticmethod
     def _summary(traces: Iterable[ExecutionTrace]) -> dict[str, int]:
@@ -72,13 +64,122 @@ class Reporter:
             return "N/A"
         return f"{trace.evaluation.score:.0%}"
 
+    @staticmethod
+    def _byte_count(value: Any) -> int:
+        if isinstance(value, str):
+            return len(value.encode("utf-8"))
+        return len(json.dumps(value, ensure_ascii=False, default=str).encode("utf-8"))
+
+    @classmethod
+    def _omitted(cls, value: Any) -> dict[str, object]:
+        return {"retained": False, "bytes": cls._byte_count(value)}
+
+    @classmethod
+    def _omitted_collection(cls, values: list[Any]) -> dict[str, object]:
+        return {
+            "retained": False,
+            "items": len(values),
+            "bytes": cls._byte_count(values),
+        }
+
+    def _markdown_models(
+        self, pack: TestPack, traces: List[ExecutionTrace]
+    ) -> tuple[TestPack, List[ExecutionTrace]]:
+        if not self.redactor:
+            return pack, traces
+        safe_pack = pack.model_copy(deep=True)
+        safe_pack.name, _ = self.redactor.redact_value(safe_pack.name)
+        safe_pack.description, _ = self.redactor.redact_value(safe_pack.description)
+        safe_pack.version, _ = self.redactor.redact_value(safe_pack.version)
+        return safe_pack, [self.redactor.redact(trace) for trace in traces]
+
+    def _pack_json(self, pack: TestPack) -> dict[str, Any]:
+        if self.include_raw_evidence:
+            return pack.model_dump(mode="json", by_alias=True)
+        return {
+            "name": pack.name,
+            "version": pack.version,
+            "description": self._omitted(pack.description),
+            "case_count": len(pack.cases),
+            "cases": [
+                {"id": case.id, "category": case.category}
+                for case in pack.cases
+            ],
+        }
+
+    def _trace_json(self, trace: ExecutionTrace) -> dict[str, Any]:
+        if self.include_raw_evidence:
+            return trace.model_dump(mode="json", by_alias=True)
+
+        evaluation = None
+        if trace.evaluation:
+            evaluation = {
+                "status": trace.evaluation.status.value,
+                "confidence": trace.evaluation.confidence,
+                "score": trace.evaluation.score,
+                "reason": self._omitted(trace.evaluation.reason),
+                "evidence": self._omitted_collection(trace.evaluation.evidence),
+                "assertions": [
+                    {
+                        "type": assertion.type.value,
+                        "outcome": assertion.outcome.value,
+                        "scope": assertion.scope.value,
+                        "weight": assertion.weight,
+                        "confidence": assertion.confidence,
+                        "turn": assertion.turn,
+                        "reason": self._omitted(assertion.reason),
+                        "evidence": self._omitted_collection(assertion.evidence),
+                    }
+                    for assertion in trace.evaluation.assertions
+                ],
+            }
+
+        error = None
+        if trace.error:
+            error = {
+                "type": trace.error.type,
+                "retryable": trace.error.retryable,
+                "status_code": trace.error.status_code,
+                "message": self._omitted(trace.error.message),
+            }
+
+        return {
+            "timestamp": trace.timestamp.isoformat(),
+            "test_case_id": trace.test_case_id,
+            "prompts": [self._omitted(value) for value in trace.prompts],
+            "responses": [self._omitted(value) for value in trace.responses],
+            "tool_calls": [
+                {
+                    "name": self._omitted(call.name),
+                    "arguments": self._omitted(call.arguments),
+                    "result": self._omitted(call.result) if call.result is not None else None,
+                }
+                for call in trace.tool_calls
+            ],
+            "redactions": [
+                {
+                    "pattern": redaction.pattern,
+                    "replacement": redaction.replacement,
+                    "match_count": redaction.match_count,
+                }
+                for redaction in trace.redactions
+            ],
+            "metadata": {
+                "retained": False,
+                "fields": len(trace.metadata),
+                "bytes": self._byte_count(trace.metadata),
+            },
+            "error": error,
+            "evaluation": evaluation,
+        }
+
     def generate_markdown(
         self,
         pack: TestPack,
         traces: List[ExecutionTrace],
         out_dir: Path,
     ) -> Path:
-        pack, traces = self._safe_inputs(pack, traces)
+        pack, traces = self._markdown_models(pack, traces)
         out_dir.mkdir(parents=True, exist_ok=True)
         report_path = out_dir / "report.md"
         summary = self._summary(traces)
@@ -90,7 +191,12 @@ class Reporter:
         with report_path.open("w", encoding="utf-8") as handle:
             handle.write(f"# DarkPrompt Security Audit Report (v{__version__})\n\n")
             handle.write(f"## Pack: {pack.name} (v{pack.version})\n\n")
-            handle.write(f"{pack.description}\n\n")
+            if self.include_raw_evidence:
+                handle.write(f"{pack.description}\n\n")
+            else:
+                handle.write(
+                    f"Description retained=false; bytes={self._byte_count(pack.description)}\n\n"
+                )
             handle.write("## Summary\n\n")
             handle.write(f"- Total traces: {len(traces)}\n")
             handle.write(
@@ -111,6 +217,9 @@ class Reporter:
             )
             handle.write(f"- Assertions evaluated: {metrics['assertion_count']}\n")
             handle.write(
+                f"- Raw evidence retained: {str(self.include_raw_evidence).lower()}\n"
+            )
+            handle.write(
                 f"- Redactions triggered: {sum(len(trace.redactions) for trace in traces)}\n\n"
             )
 
@@ -124,15 +233,29 @@ class Reporter:
                     if evaluation
                     else EvaluationStatus.INCONCLUSIVE.value.upper()
                 )
-                reason = evaluation.reason if evaluation else "Not evaluated."
+                if self.include_raw_evidence:
+                    reason = evaluation.reason if evaluation else "Not evaluated."
+                else:
+                    reason_value = evaluation.reason if evaluation else "Not evaluated."
+                    reason = f"retained=false; bytes={self._byte_count(reason_value)}"
+                category = (
+                    trace.metadata.get("category", "Unknown")
+                    if self.include_raw_evidence
+                    else "retained=false"
+                )
+                mutation = (
+                    trace.metadata.get("mutation", "Original")
+                    if self.include_raw_evidence
+                    else "retained=false"
+                )
                 handle.write(
                     "| "
                     + " | ".join(
                         self._escape_table(value)
                         for value in (
                             trace.test_case_id,
-                            trace.metadata.get("category", "Unknown"),
-                            trace.metadata.get("mutation", "Original"),
+                            category,
+                            mutation,
                             status,
                             self._format_score(trace),
                             reason,
@@ -144,7 +267,6 @@ class Reporter:
             handle.write("\n## Technical Details\n\n")
             for trace in traces:
                 handle.write(f"### Case: {trace.test_case_id}\n\n")
-                handle.write(f"- Category: {trace.metadata.get('category', 'Unknown')}\n")
                 handle.write(f"- Timestamp: {trace.timestamp.isoformat()}\n")
                 if trace.evaluation:
                     handle.write(
@@ -152,9 +274,23 @@ class Reporter:
                         f"({trace.evaluation.confidence:.0%} confidence)\n"
                     )
                     handle.write(f"- Assertion score: {self._format_score(trace)}\n")
-                    handle.write(f"- Reason: {trace.evaluation.reason}\n")
+                    if self.include_raw_evidence:
+                        handle.write(f"- Reason: {trace.evaluation.reason}\n")
+                    else:
+                        handle.write(
+                            "- Reason: retained=false; "
+                            f"bytes={self._byte_count(trace.evaluation.reason)}\n"
+                        )
                 if trace.error:
-                    handle.write(f"- Error: {trace.error.type}: {trace.error.message}\n")
+                    if self.include_raw_evidence:
+                        handle.write(
+                            f"- Error: {trace.error.type}: {trace.error.message}\n"
+                        )
+                    else:
+                        handle.write(
+                            f"- Error: {trace.error.type}; message retained=false; "
+                            f"bytes={self._byte_count(trace.error.message)}\n"
+                        )
                 handle.write("\n")
 
                 if trace.evaluation and trace.evaluation.assertions:
@@ -167,6 +303,11 @@ class Reporter:
                             if result.turn is not None
                             else result.scope.value
                         )
+                        reason = (
+                            result.reason
+                            if self.include_raw_evidence
+                            else f"retained=false; bytes={self._byte_count(result.reason)}"
+                        )
                         handle.write(
                             "| "
                             + " | ".join(
@@ -177,7 +318,7 @@ class Reporter:
                                     result.weight,
                                     result.outcome.value.upper(),
                                     f"{result.confidence:.0%}",
-                                    result.reason,
+                                    reason,
                                 )
                             )
                             + " |\n"
@@ -186,12 +327,23 @@ class Reporter:
 
                 for index, prompt in enumerate(trace.prompts, start=1):
                     handle.write(f"#### Prompt {index}\n\n")
-                    handle.write(f"```text\n{self._fence(prompt)}\n```\n\n")
-                    if index <= len(trace.responses):
-                        handle.write(f"#### Response {index}\n\n")
+                    if self.include_raw_evidence:
+                        handle.write(f"```text\n{self._fence(prompt)}\n```\n\n")
+                    else:
                         handle.write(
-                            f"```text\n{self._fence(trace.responses[index - 1])}\n```\n\n"
+                            f"retained=false; bytes={self._byte_count(prompt)}\n\n"
                         )
+                    if index <= len(trace.responses):
+                        response = trace.responses[index - 1]
+                        handle.write(f"#### Response {index}\n\n")
+                        if self.include_raw_evidence:
+                            handle.write(
+                                f"```text\n{self._fence(response)}\n```\n\n"
+                            )
+                        else:
+                            handle.write(
+                                f"retained=false; bytes={self._byte_count(response)}\n\n"
+                            )
 
                 if trace.redactions:
                     handle.write("#### Redactions\n\n")
@@ -211,17 +363,19 @@ class Reporter:
         traces: List[ExecutionTrace],
         out_dir: Path,
     ) -> Path:
-        pack, traces = self._safe_inputs(pack, traces)
         out_dir.mkdir(parents=True, exist_ok=True)
         report_path = out_dir / "report.json"
         data = {
-            "schema_version": "1.2",
+            "schema_version": "1.3",
             "darkprompt_version": __version__,
-            "pack": pack.model_dump(mode="json", by_alias=True),
+            "raw_evidence_retained": self.include_raw_evidence,
+            "pack": self._pack_json(pack),
             "summary": self._summary(traces),
             "metrics": self._metrics(traces),
-            "traces": [trace.model_dump(mode="json", by_alias=True) for trace in traces],
+            "traces": [self._trace_json(trace) for trace in traces],
         }
+        if self.redactor:
+            data, _ = self.redactor.redact_value(data)
         with report_path.open("w", encoding="utf-8") as handle:
             json.dump(data, handle, indent=2, ensure_ascii=False)
             handle.write("\n")

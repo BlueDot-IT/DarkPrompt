@@ -153,7 +153,17 @@ def run(
     fail_on_findings: bool = typer.Option(
         False,
         "--fail-on-findings",
-        help="Exit with status 2 when FAIL or PARTIAL findings are present.",
+        help="Exit with status 2 for findings or incomplete evaluations.",
+    ),
+    allow_incomplete: bool = typer.Option(
+        False,
+        "--allow-incomplete",
+        help="With --fail-on-findings, allow ERROR, SKIPPED, and INCONCLUSIVE cases.",
+    ),
+    include_raw_evidence: bool = typer.Option(
+        False,
+        "--include-raw-evidence",
+        help="Retain prompts, responses, errors, and report evidence after redaction.",
     ),
 ):
     """Run an adversarial test pack against one target provider."""
@@ -281,7 +291,10 @@ def run(
                 jobs.append(execute)
             traces = _run_parallel(jobs, max_workers)
 
-        reporter = Reporter(redactor=redactor)
+        reporter = Reporter(
+            include_raw_evidence=include_raw_evidence,
+            redactor=redactor,
+        )
         report_path = (
             reporter.generate_json(pack, traces, out_dir)
             if report_format == "json"
@@ -289,13 +302,20 @@ def run(
         )
         console.print(f"[bold green]Audit complete[/bold green]: {report_path}")
 
-        has_findings = any(
-            trace.evaluation
-            and trace.evaluation.status
-            in {EvaluationStatus.FAIL, EvaluationStatus.PARTIAL}
+        blocking_statuses = {EvaluationStatus.FAIL, EvaluationStatus.PARTIAL}
+        if not allow_incomplete:
+            blocking_statuses.update(
+                {
+                    EvaluationStatus.ERROR,
+                    EvaluationStatus.SKIPPED,
+                    EvaluationStatus.INCONCLUSIVE,
+                }
+            )
+        has_blocking_result = any(
+            not trace.evaluation or trace.evaluation.status in blocking_statuses
             for trace in traces
         )
-        if fail_on_findings and has_findings:
+        if fail_on_findings and has_blocking_result:
             raise typer.Exit(2)
     except (PackLoadError, RedactionPatternError, FileNotFoundError, ValueError) as exc:
         console.print(f"[red]Configuration error: {exc}[/red]")
