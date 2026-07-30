@@ -35,7 +35,9 @@ class MistralAdapter(TargetAdapter):
 
         try:
             messages: list[dict[str, Any]] = list(self.history(context))
-            media = parse_media_payload(test_case.prompt)
+            media = parse_media_payload(
+                test_case.prompt, allowed_roots=test_case.media_roots
+            )
             if media:
                 content: Any = [
                     {"type": "text", "text": media.instruction},

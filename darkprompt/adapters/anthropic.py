@@ -40,7 +40,9 @@ class AnthropicAdapter(TargetAdapter):
                 item for item in history if item["role"] in {"user", "assistant"}
             ]
 
-            media = parse_media_payload(test_case.prompt)
+            media = parse_media_payload(
+                test_case.prompt, allowed_roots=test_case.media_roots
+            )
             if media:
                 content: Any = [
                     {

@@ -3,13 +3,31 @@ from __future__ import annotations
 import json
 from collections import Counter
 from pathlib import Path
-from typing import Iterable, List
+from typing import TYPE_CHECKING, Iterable, List, Optional
 
 from . import __version__
 from .models import EvaluationStatus, ExecutionTrace, TestPack
 
+if TYPE_CHECKING:
+    from .redactor import RegexRedactor
+
 
 class Reporter:
+    def __init__(self, redactor: Optional["RegexRedactor"] = None):
+        self.redactor = redactor
+
+    def _safe_inputs(
+        self,
+        pack: TestPack,
+        traces: List[ExecutionTrace],
+    ) -> tuple[TestPack, List[ExecutionTrace]]:
+        if not self.redactor:
+            return pack, traces
+        return (
+            self.redactor.redact_pack(pack),
+            [self.redactor.redact(trace) for trace in traces],
+        )
+
     @staticmethod
     def _summary(traces: Iterable[ExecutionTrace]) -> dict[str, int]:
         counts = Counter(
@@ -60,6 +78,7 @@ class Reporter:
         traces: List[ExecutionTrace],
         out_dir: Path,
     ) -> Path:
+        pack, traces = self._safe_inputs(pack, traces)
         out_dir.mkdir(parents=True, exist_ok=True)
         report_path = out_dir / "report.md"
         summary = self._summary(traces)
@@ -192,6 +211,7 @@ class Reporter:
         traces: List[ExecutionTrace],
         out_dir: Path,
     ) -> Path:
+        pack, traces = self._safe_inputs(pack, traces)
         out_dir.mkdir(parents=True, exist_ok=True)
         report_path = out_dir / "report.json"
         data = {

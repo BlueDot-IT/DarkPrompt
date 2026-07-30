@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from darkprompt.adapters import anthropic, gemini, huggingface, mistral, ollama, openai
-from darkprompt.adapters.common import parse_media_payload
+from darkprompt.adapters.common import MAX_MEDIA_BYTES, parse_media_payload
 from darkprompt.models import TestCase as DarkTestCase
 
 
@@ -50,14 +50,49 @@ def test_parse_media_payload(tmp_path):
     image = tmp_path / "payload.png"
     image.write_bytes(b"png-data")
     parsed = parse_media_payload(
-        f"[MEDIA_PAYLOAD:{image}] Read this image."
+        f"[MEDIA_PAYLOAD:{image}] Read this image.",
+        allowed_roots=[tmp_path],
     )
     assert parsed.instruction == "Read this image."
     assert parsed.media_type == "image/png"
     assert parsed.data_b64
 
     with pytest.raises(FileNotFoundError):
-        parse_media_payload("[MEDIA_PAYLOAD:/missing/file.png] Read.")
+        parse_media_payload(
+            "[MEDIA_PAYLOAD:/missing/file.png] Read.",
+            allowed_roots=[tmp_path],
+        )
+
+
+def test_parse_media_payload_confines_paths_and_size(tmp_path):
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(b"secret")
+
+    with pytest.raises(ValueError, match="allowed root"):
+        parse_media_payload(f"[MEDIA_PAYLOAD:{outside}] inspect")
+    with pytest.raises(ValueError, match="within"):
+        parse_media_payload(
+            f"[MEDIA_PAYLOAD:{outside}] inspect",
+            allowed_roots=[pack],
+        )
+
+    link = pack / "link.png"
+    link.symlink_to(outside)
+    with pytest.raises(ValueError, match="within"):
+        parse_media_payload(
+            "[MEDIA_PAYLOAD:link.png] inspect",
+            allowed_roots=[pack],
+        )
+
+    large = pack / "large.png"
+    large.write_bytes(b"x" * (MAX_MEDIA_BYTES + 1))
+    with pytest.raises(ValueError, match="size limit"):
+        parse_media_payload(
+            "[MEDIA_PAYLOAD:large.png] inspect",
+            allowed_roots=[pack],
+        )
 
 
 def test_openai_sends_history_and_image(tmp_path):
@@ -84,13 +119,15 @@ def test_openai_sends_history_and_image(tmp_path):
     adapter.client = SimpleNamespace(
         chat=SimpleNamespace(completions=FakeCompletions())
     )
+    test_case = DarkTestCase(
+        id="x",
+        name="x",
+        category="x",
+        prompt=f"[MEDIA_PAYLOAD:{image}] inspect",
+    )
+    test_case.allow_media_root(tmp_path)
     trace = adapter.execute(
-        DarkTestCase(
-            id="x",
-            name="x",
-            category="x",
-            prompt=f"[MEDIA_PAYLOAD:{image}] inspect",
-        ),
+        test_case,
         {"history": [{"role": "user", "content": "prior"}]},
     )
 

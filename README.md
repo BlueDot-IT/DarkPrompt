@@ -167,6 +167,11 @@ cases:
         weight: 2
 ```
 
+Image payload markers may use relative paths such as
+`[MEDIA_PAYLOAD:assets/example.png]`. DarkPrompt resolves pack-provided media
+only within the pack directory, rejects symlink escapes and non-image files,
+and limits each image to 10 MiB.
+
 Multi-turn cases use `chain` and may scope assertions to a specific turn:
 
 ```yaml
@@ -205,7 +210,10 @@ darkprompt run --pack ./sample_pack --target ollama --format markdown
 darkprompt run --pack ./sample_pack --target ollama --format json
 ```
 
-Custom redaction expressions may be repeated. Redaction applies to prompts, responses, provider errors, aggregate evaluation content, and assertion evidence.
+Custom redaction expressions may be repeated. Redaction applies to the complete
+report, including pack data, prompts, responses, tool calls, metadata, provider
+errors, aggregate evaluation content, and assertion evidence. Reports record
+opaque pattern IDs and match counts instead of the literal expressions.
 
 ```bash
 darkprompt run \

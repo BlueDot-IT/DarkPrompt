@@ -3,10 +3,11 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from jsonschema import Draft202012Validator, SchemaError
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator, model_validator
 
 
 class EvaluationStatus(str, Enum):
@@ -152,6 +153,8 @@ class ExecutionTrace(BaseModel):
 
 
 class TestCase(BaseModel):
+    _media_roots: tuple[Path, ...] = PrivateAttr(default_factory=tuple)
+
     id: str
     name: str
     category: str
@@ -160,6 +163,15 @@ class TestCase(BaseModel):
     assertions: List[TestAssertion] = Field(default_factory=list)
     parameters: Dict[str, Any] = Field(default_factory=dict)
     chain: List[str] = Field(default_factory=list)
+
+    @property
+    def media_roots(self) -> tuple[Path, ...]:
+        return self._media_roots
+
+    def allow_media_root(self, root: Path) -> None:
+        resolved = root.expanduser().resolve()
+        if resolved not in self._media_roots:
+            self._media_roots = (*self._media_roots, resolved)
 
     @field_validator("id", "name", "category", "prompt")
     @classmethod
