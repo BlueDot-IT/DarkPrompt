@@ -83,7 +83,7 @@ def parse_media_payload(
 
             try:
                 resolved_after_open = path.resolve(strict=True)
-                current = resolved_after_open.stat(follow_symlinks=False)
+                current = os.stat(resolved_after_open, follow_symlinks=False)
             except OSError as exc:
                 raise ValueError("Media payload changed while it was being opened.") from exc
             if not _within_roots(resolved_after_open, roots):
