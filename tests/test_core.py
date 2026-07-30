@@ -140,6 +140,8 @@ def test_redactor_validates_and_redacts_error_messages():
     assert redacted.prompts == ["[REDACTED]"]
     assert redacted.responses == ["[REDACTED]"]
     assert redacted.redactions[0].match_count == 2
+    assert redacted.redactions[0].pattern == "pattern-1"
+    assert trace.prompts == ["secret@example.com"]
 
 
 def test_rule_evaluator_handles_inconclusive_and_empty():
@@ -214,6 +216,58 @@ def test_reporter_writes_detailed_finding(tmp_path: Path):
     assert "#### Response 1" in report
 
 
+def test_reporter_redacts_complete_report_without_storing_patterns(tmp_path: Path):
+    secret = "secret@example.com"
+    test_case = DarkTestCase(
+        id="CASE-SECRET",
+        name="case",
+        category="test",
+        prompt=secret,
+        parameters={"nested": {"secret": secret}},
+    )
+    pack = DarkTestPack(
+        name="pack",
+        description=secret,
+        version="1",
+        cases=[test_case],
+    )
+    trace = ExecutionTrace(
+        test_case_id=test_case.id,
+        prompts=[secret],
+        responses=[secret],
+        tool_calls=[{"name": "tool", "arguments": secret, "result": secret}],
+        metadata={"nested": {"secret": secret}},
+        redactions=[
+            {
+                "pattern": secret,
+                "replacement": secret,
+                "match_count": 1,
+            }
+        ],
+    )
+    redactor = RegexRedactor([r"secret@example\.com"])
+    redacted_trace = redactor.redact(trace)
+    reporter = Reporter(redactor=redactor)
+
+    json_report = reporter.generate_json(pack, [redacted_trace], tmp_path / "json")
+    markdown_report = reporter.generate_markdown(
+        pack,
+        [redacted_trace],
+        tmp_path / "markdown",
+    )
+
+    for report in (json_report, markdown_report):
+        content = report.read_text(encoding="utf-8")
+        assert secret not in content
+        assert r"secret@example\.com" not in content
+        assert "[REDACTED]" in content
+        assert "pattern-1" in content
+        assert "recorded-pattern-1" in content
+
+    assert pack.description == secret
+    assert trace.tool_calls[0].arguments == secret
+
+
 def test_model_rejects_blank_required_values():
     with pytest.raises(ValueError):
         DarkTestCase(id=" ", name="x", category="x", prompt="x")
@@ -231,3 +285,6 @@ def test_runner_loads_case_files(tmp_path: Path):
     )
     loaded = Runner(RecordingAdapter()).load_pack(tmp_path)
     assert [item.id for item in loaded.cases] == ["A"]
+    assert loaded.cases[0].media_roots == (tmp_path.resolve(),)
+    assert "_media_roots" not in loaded.cases[0].model_dump()
+    assert loaded.cases[0].model_copy(deep=True).media_roots == (tmp_path.resolve(),)

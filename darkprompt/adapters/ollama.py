@@ -27,7 +27,9 @@ class OllamaAdapter(TargetAdapter):
     def execute(self, test_case: TestCase, context: Dict[str, Any]) -> ExecutionTrace:
         try:
             messages: list[dict[str, Any]] = list(self.history(context))
-            media = parse_media_payload(test_case.prompt)
+            media = parse_media_payload(
+                test_case.prompt, allowed_roots=test_case.media_roots
+            )
             current: dict[str, Any] = {
                 "role": "user",
                 "content": media.instruction if media else test_case.prompt,

@@ -29,6 +29,7 @@ class Runner:
         self.evaluator = evaluator or RuleEvaluator()
 
     def load_pack(self, pack_dir: Path) -> TestPack:
+        pack_root = pack_dir.expanduser().resolve()
         pack_yaml = pack_dir / "pack.yaml"
         if not pack_yaml.is_file():
             raise PackLoadError(f"Missing pack file: {pack_yaml}")
@@ -59,6 +60,8 @@ class Runner:
                 except (OSError, yaml.YAMLError, ValidationError, TypeError) as exc:
                     raise PackLoadError(f"Invalid case file {case_file}: {exc}") from exc
 
+        for case in pack.cases:
+            case.allow_media_root(pack_root)
         return pack
 
     def finalize_trace(self, case: TestCase, trace: ExecutionTrace) -> ExecutionTrace:

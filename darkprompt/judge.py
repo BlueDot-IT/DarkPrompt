@@ -37,6 +37,8 @@ class JudgeFeedbackLoop:
         for index, (label, prompt) in enumerate(variants[:attempt_limit]):
             attempt_case = case.model_copy(deep=True)
             attempt_case.prompt = prompt
+            if label == "OCR":
+                attempt_case.allow_media_root(self.mutator.out_dir)
             attempt = runner.run_case(attempt_case)
 
             aggregate.prompts.extend(attempt.prompts)

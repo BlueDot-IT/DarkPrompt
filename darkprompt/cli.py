@@ -223,6 +223,8 @@ def run(
                 ):
                     mutated_case = original_case.model_copy(deep=True)
                     mutated_case.prompt = mutated_prompt
+                    if mutation_name == "OCR":
+                        mutated_case.allow_media_root(mutator.out_dir)
                     suffix = re.sub(r"[^A-Za-z0-9]+", "-", mutation_name).strip("-")
                     mutated_case.id = f"{original_case.id}-{suffix}"
 
@@ -259,6 +261,8 @@ def run(
                 if mutate:
                     variants = mutator.named_variants(case.prompt)[1:]
                     mutation_name, case.prompt = rng.choice(variants)
+                    if mutation_name == "OCR":
+                        case.allow_media_root(mutator.out_dir)
                 else:
                     mutation_name = "Original"
                 cases.append((case, mutation_name))
@@ -277,7 +281,7 @@ def run(
                 jobs.append(execute)
             traces = _run_parallel(jobs, max_workers)
 
-        reporter = Reporter()
+        reporter = Reporter(redactor=redactor)
         report_path = (
             reporter.generate_json(pack, traces, out_dir)
             if report_format == "json"

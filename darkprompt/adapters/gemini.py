@@ -49,7 +49,9 @@ class GeminiAdapter(TargetAdapter):
                     }
                 )
 
-            media = parse_media_payload(test_case.prompt)
+            media = parse_media_payload(
+                test_case.prompt, allowed_roots=test_case.media_roots
+            )
             parts: list[dict[str, Any]]
             if media:
                 parts = [
