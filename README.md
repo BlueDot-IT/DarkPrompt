@@ -37,6 +37,8 @@ Provider and model capabilities still vary. DarkPrompt reports unsupported paylo
 
 ## Installation
 
+Python 3.10 or newer is required.
+
 ```bash
 git clone https://github.com/BlueDot-IT/DarkPrompt.git
 cd DarkPrompt
