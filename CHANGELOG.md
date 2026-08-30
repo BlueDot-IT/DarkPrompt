@@ -12,6 +12,12 @@ All notable changes to DarkPrompt are documented here.
 - Added bounded regex evaluation and hardened refusal heuristics against mixed refusal/compliance.
 - Sanitized HTTP status errors before persistence.
 - Added a locked CI dependency graph and corrected organization repository links.
+- Raised the locked minimums for Pillow, python-dotenv, and pytest to their patched releases.
+
+### Compatibility
+
+- Python 3.10 or newer is now required because the patched dependency releases no longer support
+  Python 3.9.
 
 ## 1.2.0
 
